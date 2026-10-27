@@ -1,0 +1,253 @@
+{
+  // World of ClaudeCraft tasks: Ctrl+Shift+P > "Tasks: Run Task".
+  //
+  // LAN play: this PC runs the server; phones and other PCs on the same Wi-Fi join at
+  //   http://<this PC's LAN IP>:8787  (built client, "Host: LAN world")
+  //   http://<this PC's LAN IP>:5173  (hot-reload client, "Dev: online stack (LAN)")
+  // Windows Firewall must allow inbound TCP 8787 and 5173 on the Private profile.
+  //
+  // Windows tasks run in cmd.exe so `&&` chains behave the same whatever the default
+  // terminal is. package.json's build:native / native:sync use POSIX `VAR=value` syntax,
+  // which cmd cannot run, so the Android tasks set env via options.env and inline the steps.
+  "version": "2.0.0",
+  "windows": {
+    "options": {
+      "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] }
+    }
+  },
+  "inputs": [
+    {
+      "id": "lanHost",
+      "type": "promptString",
+      "description": "This PC's LAN IPv4 (ipconfig, Wi-Fi adapter)",
+      "default": "192.168.1.251"
+    },
+    {
+      "id": "phonePair",
+      "type": "promptString",
+      "description": "Phone pairing IP:port (Wireless debugging > Pair device with pairing code)",
+      "default": "192.168.1.200:"
+    },
+    {
+      "id": "pairCode",
+      "type": "promptString",
+      "description": "Six-digit Wi-Fi pairing code"
+    },
+    {
+      "id": "phoneConnect",
+      "type": "promptString",
+      "description": "Phone IP:port shown on the Wireless debugging screen (not the pairing port)",
+      "default": "192.168.1.200:"
+    }
+  ],
+  "tasks": [
+    // ---- Setup ----
+    {
+      "label": "Setup: install dependencies",
+      "type": "shell",
+      "command": "pnpm install --frozen-lockfile",
+      "problemMatcher": []
+    },
+
+    // ---- Database (Postgres 16 in Docker on 127.0.0.1:5433) ----
+    {
+      "label": "DB: start Postgres",
+      "type": "shell",
+      "command": "pnpm run db:up",
+      "problemMatcher": []
+    },
+    {
+      "label": "DB: stop all compose services",
+      "type": "shell",
+      "command": "pnpm run db:down",
+      "problemMatcher": []
+    },
+
+    // ---- Server ----
+    {
+      "label": "Server: run (:8787, all interfaces)",
+      "detail": "Bundles server/ and runs it; also serves the last built client from dist/.",
+      "type": "shell",
+      "command": "pnpm run server",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "woc-server",
+        "pattern": { "regexp": "^__never__$" },
+        "background": {
+          "activeBegins": true,
+          "beginsPattern": "\\[build:server\\]",
+          "endsPattern": "server listening on"
+        }
+      }
+    },
+
+    // ---- Client ----
+    {
+      "label": "Client: dev server (localhost:5173)",
+      "detail": "Hot reload. Offline mode is available here (dev builds only).",
+      "type": "shell",
+      "command": "pnpm run dev",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": { "regexp": "^__never__$" },
+        "background": { "activeBegins": true, "beginsPattern": "VITE v", "endsPattern": "Local:" }
+      }
+    },
+    {
+      "label": "Client: dev server (LAN :5173)",
+      "detail": "Hot reload reachable from phones/PCs at http://<LAN IP>:5173.",
+      "type": "shell",
+      "command": "pnpm exec vite --host",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": { "regexp": "^__never__$" },
+        "background": { "activeBegins": true, "beginsPattern": "VITE v", "endsPattern": "Network:" }
+      }
+    },
+    {
+      "label": "Build: web client (dist/)",
+      "detail": "i18n + wiki content + vite build. The server serves this at :8787.",
+      "type": "shell",
+      "command": "pnpm run build",
+      "group": "build",
+      "problemMatcher": []
+    },
+
+    // ---- One-click stacks ----
+    {
+      "label": "Dev: online stack (LAN)",
+      "detail": "Postgres, then the server, then the LAN hot-reload client.",
+      "dependsOrder": "sequence",
+      "dependsOn": ["DB: start Postgres", "Server: run (:8787, all interfaces)", "Client: dev server (LAN :5173)"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Host: LAN world (built client on :8787)",
+      "detail": "Postgres, a fresh client build, then the server. Join at http://<LAN IP>:8787.",
+      "dependsOrder": "sequence",
+      "dependsOn": ["DB: start Postgres", "Build: web client (dist/)", "Server: run (:8787, all interfaces)"],
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker: host world (compose up --build)",
+      "detail": "Production-style containers. Note compose binds 8787 to 127.0.0.1 only, so this is not LAN-reachable as-is.",
+      "type": "shell",
+      "command": "docker compose up -d --build",
+      "problemMatcher": []
+    },
+
+    // ---- Android (Capacitor) ----
+    {
+      "label": "Android: pair phone (Wi-Fi, one time)",
+      "type": "shell",
+      "command": "${env:LOCALAPPDATA}\\Android\\Sdk\\platform-tools\\adb.exe pair ${input:phonePair} ${input:pairCode}",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: connect phone (Wi-Fi)",
+      "type": "shell",
+      "command": "${env:LOCALAPPDATA}\\Android\\Sdk\\platform-tools\\adb.exe connect ${input:phoneConnect} && ${env:LOCALAPPDATA}\\Android\\Sdk\\platform-tools\\adb.exe devices -l",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: web bundle for LAN server + cap sync",
+      "detail": "native:sync aimed at http://<LAN IP>:8787, OTA off. Overwrites dist/: rerun Build: web client before hosting browsers.",
+      "type": "shell",
+      "command": "pnpm run build && node scripts/build_media_manifest.mjs prune && pnpm exec cap sync android && node .vscode/disable_native_ota.mjs",
+      "options": {
+        "env": {
+          "VITE_NATIVE_APP": "1",
+          "VITE_API_ORIGIN": "http://${input:lanHost}:8787"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: build debug APK",
+      "detail": "Gradle assemblePlayDebug with Android Studio's bundled JDK 21.",
+      "type": "shell",
+      "command": ".\\gradlew.bat assemblePlayDebug",
+      "options": {
+        "cwd": "${workspaceFolder}\\android",
+        "env": {
+          "JAVA_HOME": "C:\\Program Files\\Android\\Android Studio\\jbr",
+          "ANDROID_HOME": "${env:LOCALAPPDATA}\\Android\\Sdk"
+        }
+      },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: install debug APK on phone",
+      "type": "shell",
+      "command": "${env:LOCALAPPDATA}\\Android\\Sdk\\platform-tools\\adb.exe install -r android\\app\\build\\outputs\\apk\\play\\debug\\app-play-debug.apk",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: LAN APK (bundle, build, install)",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Android: web bundle for LAN server + cap sync",
+        "Android: build debug APK",
+        "Android: install debug APK on phone"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: open project in Android Studio",
+      "type": "shell",
+      "command": "pnpm exec cap open android",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: open LAN world in phone browser",
+      "type": "shell",
+      "command": "${env:LOCALAPPDATA}\\Android\\Sdk\\platform-tools\\adb.exe shell am start -a android.intent.action.VIEW -d http://${input:lanHost}:8787/",
+      "problemMatcher": []
+    },
+
+    // ---- Desktop (Electron) ----
+    {
+      "label": "Desktop: Electron dev shell (local server)",
+      "type": "shell",
+      "command": "pnpm run electron:dev",
+      "options": { "env": { "VITE_DESKTOP_API_ORIGIN": "http://127.0.0.1:8787" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "Desktop: pack Windows app for LAN server",
+      "detail": "Unpacked app in release/win-unpacked, pointed at http://<LAN IP>:8787.",
+      "type": "shell",
+      "command": "pnpm run electron:pack",
+      "options": { "env": { "VITE_DESKTOP_API_ORIGIN": "http://${input:lanHost}:8787" } },
+      "group": "build",
+      "problemMatcher": []
+    },
+
+    // ---- Checks ----
+    {
+      "label": "Test: current file",
+      "type": "shell",
+      "command": "pnpm exec vitest run ${relativeFile}",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Test: typecheck",
+      "type": "shell",
+      "command": "pnpm run check:ts",
+      "group": "test",
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "Gate: pre-merge (selective)",
+      "type": "shell",
+      "command": "node scripts/gate_select.mjs",
+      "group": "test",
+      "problemMatcher": []
+    }
+  ]
+}
