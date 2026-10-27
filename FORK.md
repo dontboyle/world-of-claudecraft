@@ -47,6 +47,32 @@ on this PC; check with `Get-ExecutionPolicy -List`):
    applies on Private networks: if Windows marked the Wi-Fi as Public, switch it to Private
    in Settings rather than opening the port on Public networks.
 
+## Accounts
+
+Family logins live in `.env.local` (git-ignored; this fork is public) as one line:
+
+```
+SEED_ACCOUNTS=username:password:email,username:password:email
+```
+
+**Setup: seed LAN accounts (from .env.local)** starts Postgres and creates each one through
+the server's own account functions (`lan/seed-accounts.ts`, bundled with esbuild because
+the repo has no `tsx`). Names that already exist are skipped, so rerun it after adding a
+line, or after wiping the database volume. Seeding writes straight to the database, so
+registration's rules (usernames of 3 or more characters, passwords of 6 or more) do not
+apply; login does not re-check them.
+
+What "GM" means in this game, for reference:
+
+- **Staff roles** (`node scripts/grant_admin.mjs <username>`, superadmin by default;
+  `--revoke` removes): in-game moderation commands (kick, mute, ban, jail, spectate,
+  invisibility, announcements, message of the day) and the admin dashboard at
+  `http://<this PC's IP>:8787/admin`. No cheats, no level changes.
+- **GM characters** (`node scripts/create_gm.mjs <username>`): extra characters named
+  GM01, GM02, ... that are invulnerable and forced to level 20. Not used here.
+- **Cheats** (level, teleport, items, mob spawns): `ALLOW_DEV_COMMANDS=1` in `.env`, but it
+  turns them on for every player on the server, not per account.
+
 ## Desktop shortcuts
 
 **Setup: create desktop shortcuts** (or `lan\install-shortcuts.ps1`) fills
