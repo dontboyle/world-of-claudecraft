@@ -141,14 +141,22 @@
       "label": "Dev: online stack (LAN)",
       "detail": "Postgres, then the server, then the LAN hot-reload client.",
       "dependsOrder": "sequence",
-      "dependsOn": ["DB: start Postgres", "Server: run (:8787, all interfaces)", "Client: dev server (LAN :5173)"],
+      "dependsOn": [
+        "DB: start Postgres",
+        "Server: run (:8787, all interfaces)",
+        "Client: dev server (LAN :5173)"
+      ],
       "problemMatcher": []
     },
     {
       "label": "Host: LAN world (built client on :8787)",
       "detail": "Postgres, a fresh client build, then the server. Join at http://<LAN IP>:8787.",
       "dependsOrder": "sequence",
-      "dependsOn": ["DB: start Postgres", "Build: web client (dist/)", "Server: run (:8787, all interfaces)"],
+      "dependsOn": [
+        "DB: start Postgres",
+        "Build: web client (dist/)",
+        "Server: run (:8787, all interfaces)"
+      ],
       "group": { "kind": "build", "isDefault": true },
       "problemMatcher": []
     },
