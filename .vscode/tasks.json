@@ -49,6 +49,13 @@
       "problemMatcher": []
     },
     {
+      "label": "Setup: allow LAN through Windows Firewall (admin)",
+      "detail": "Adds the inbound rule for TCP 8787 and 5173 on Private networks; shows a UAC prompt.",
+      "type": "shell",
+      "command": "powershell.exe -NoProfile -File lan\\allow-firewall.ps1 -NoPause",
+      "problemMatcher": []
+    },
+    {
       "label": "Setup: create desktop shortcuts",
       "detail": "Start/Stop/Rebuild Server, Play, and FORK.md in Desktop\\World of ClaudeCraft.",
       "type": "shell",
@@ -181,9 +188,9 @@
     },
     {
       "label": "Android: build debug APK",
-      "detail": "Gradle assemblePlayDebug with Android Studio's bundled JDK 21.",
+      "detail": "Gradle assemblePlayDebug with Android Studio's bundled JDK 21, copied into out/.",
       "type": "shell",
-      "command": ".\\gradlew.bat assemblePlayDebug",
+      "command": ".\\gradlew.bat assemblePlayDebug && powershell.exe -NoProfile -File ..\\lan\\copy-to-out.ps1 -Kind android",
       "options": {
         "cwd": "${workspaceFolder}\\android",
         "env": {
@@ -234,11 +241,16 @@
       "problemMatcher": []
     },
     {
-      "label": "Desktop: pack Windows app for LAN server",
-      "detail": "Unpacked app in release/win-unpacked, pointed at http://<LAN IP>:8787.",
+      "label": "Desktop: Windows installer for LAN server",
+      "detail": "electron-builder NSIS installer pointed at http://<LAN IP>:8787, copied into out/. Overwrites dist/.",
       "type": "shell",
-      "command": "pnpm run electron:pack",
-      "options": { "env": { "VITE_DESKTOP_API_ORIGIN": "http://${input:lanHost}:8787" } },
+      "command": "powershell.exe -NoProfile -File lan\\build-desktop.ps1 -LanHost ${input:lanHost} -NoPause",
+      "problemMatcher": []
+    },
+    {
+      "label": "Desktop: LAN installer to out/ (then restore web build)",
+      "dependsOrder": "sequence",
+      "dependsOn": ["Desktop: Windows installer for LAN server", "Build: web client (dist/)"],
       "group": "build",
       "problemMatcher": []
     },

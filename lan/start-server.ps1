@@ -21,7 +21,17 @@ try {
     '-NoProfile', '-File', "`"$(Join-Path $PSScriptRoot 'run-server.ps1')`""
   )
   Write-Host 'The server is starting in its own window.' -ForegroundColor Green
-  Wait-BeforeClose 3
+  if (Test-LanFirewall) {
+    Wait-BeforeClose 3
+  } else {
+    Write-Host ''
+    Write-FirewallHelp
+    if (-not $NoPause) {
+      $answer = Read-Host 'Add the firewall rule now? Windows will ask for admin rights [y/N]'
+      if ($answer -match '^(y|yes)$') { & (Join-Path $PSScriptRoot 'allow-firewall.ps1') -NoPause }
+    }
+    Wait-BeforeClose
+  }
 } catch {
   Write-Host $_ -ForegroundColor Red
   Wait-BeforeClose

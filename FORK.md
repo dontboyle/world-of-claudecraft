@@ -34,12 +34,18 @@ on this PC; check with `Get-ExecutionPolicy -List`):
      reads both.
    - The password is baked into the Docker volume `world-of-claudecraft_eastbrook_pgdata`
      on first start. Deleting that volume deletes every account and character.
-3. Windows Firewall, in an admin PowerShell (once):
+3. Windows Firewall (once): **Setup: allow LAN through Windows Firewall (admin)**, or
+   `lan\allow-firewall.ps1`, which shows a UAC prompt and adds this rule (same as running
+   it in an admin PowerShell):
    ```powershell
    New-NetFirewallRule -DisplayName "World of ClaudeCraft LAN" -Direction Inbound -Protocol TCP -LocalPort 8787,5173 -Profile Private -Action Allow
    ```
    Node's own allow rules on this PC cover only the Public profile, and the Wi-Fi network
-   is Private, so without this rule other devices time out.
+   is Private, so without this rule other devices time out. Start Server checks for the
+   rule (or a node.exe rule covering port 8787 on the current network profile) and offers
+   to add it; the server window also prints a warning while it is missing. The rule only
+   applies on Private networks: if Windows marked the Wi-Fi as Public, switch it to Private
+   in Settings rather than opening the port on Public networks.
 
 ## Desktop shortcuts
 
@@ -48,7 +54,7 @@ on this PC; check with `Get-ExecutionPolicy -List`):
 
 | Shortcut | Does |
 |---|---|
-| Start Server | Starts Docker Desktop if needed, Postgres, bundles the server (and builds the client if `dist/` is missing), then runs the server in its own window titled "World of ClaudeCraft Server". |
+| Start Server | Starts Docker Desktop if needed, Postgres, bundles the server (and builds the client if `dist/` is missing), then runs the server in its own window titled "World of ClaudeCraft Server". Warns, and offers to fix it, if the firewall blocks other devices. |
 | Stop Server | Sends Ctrl+C to the server so it saves every character, then stops Postgres. Forces the stop only if the server has not exited after 60 seconds. |
 | Rebuild and Restart Server | After pulling or committing changes: stops the server, `pnpm install`, rebuilds the client, starts again. Browser players get the new version on their next page load. |
 | Play World of ClaudeCraft | Chrome (or Edge) in app mode at `http://localhost:8787`. |
@@ -103,8 +109,9 @@ $ip='192.168.1.200'; $open=@(); for ($s=30000; $s -lt 50000; $s+=1000) { $p=@();
    `VITE_NATIVE_APP=1` and `VITE_API_ORIGIN=http://<this PC's IP>:8787`, prunes duplicate
    media, runs `cap sync android`, then `.vscode/disable_native_ota.mjs`.
 2. **Android: build debug APK**: `.\gradlew.bat assemblePlayDebug` with `JAVA_HOME` set to
-   Android Studio's JDK. Output:
-   `android/app/build/outputs/apk/play/debug/app-play-debug.apk` (about 1.3 GB).
+   Android Studio's JDK, then copies
+   `android/app/build/outputs/apk/play/debug/app-play-debug.apk` (about 1.3 GB) to
+   `out/world-of-claudecraft-<version>-android-lan-debug.apk`.
 3. **Android: install debug APK on phone**: `adb install -r` (about 100 seconds over
    Wi-Fi).
 
@@ -113,6 +120,10 @@ $ip='192.168.1.200'; $open=@(); for ($s=30000; $s -lt 50000; $s+=1000) { $p=@();
 
 The server address is baked into the APK, so rebuild it if this PC's IP changes. Game
 data (accounts, characters) lives on the server, so uninstalling the app loses nothing.
+
+The APK is signed with this PC's Android debug key (`%USERPROFILE%\.android\debug.keystore`).
+Android only installs an update signed with the same key, so back that file up: an APK
+built on another PC (or after losing the key) needs the old app uninstalled first.
 
 ### Why the tasks do not call `pnpm run native:sync`
 
@@ -129,10 +140,34 @@ upstream's next web bundle and start talking to the live server. The helper
 
 ## PC client
 
-Use a browser at `http://<this PC's IP>:8787` (`http://localhost:8787` on this PC).
-**Desktop: pack Windows app for LAN server** builds an Electron app in
-`release/win-unpacked`, but its website-channel updater polls
-`updates.worldofclaudecraft.com`, so the browser is the safer client.
+On this PC, the Play shortcut. On other PCs, a browser at `http://<this PC's IP>:8787`, or
+the installer:
+
+**Desktop: LAN installer to out/ (then restore web build)** runs `lan\build-desktop.ps1`:
+`pnpm run electron:build` with `VITE_DESKTOP_API_ORIGIN=http://<this PC's IP>:8787`, then
+copies the x64 installer to `out/world-of-claudecraft-<version>-windows-x64-setup.exe`.
+After that the task rebuilds the browser client (the desktop build overwrites `dist/`).
+
+Upstream's config also builds an arm64 installer. On this PC that half fails, because
+recompiling the `bigint-buffer` native module for arm64 needs Visual Studio's MSVC ARM64
+build tools, which are not installed. It fails after the x64 installer is finished, so the
+script accepts the run when the x64 installer and its blockmap were both written during
+it, and prints a warning. Install the ARM64 C++ tools in Visual Studio Installer if you
+ever want the arm64 build. The installer is unsigned, so Windows SmartScreen warns on first
+run ("More info", then "Run anyway").
+
+The installed app keeps upstream's updater, which checks
+`updates.worldofclaudecraft.com/desktop` on its "dev" track. Upstream published no dev feed
+when this was written (`dev.yml` answered 404), and `electron/update_guard.cjs` refuses any
+update stamped for a server address other than this build's, so it never swaps itself for
+upstream's build. To update a PC, rerun the installer.
+
+## Build outputs: `out/`
+
+Finished APKs and installers land in `out/`, which ignores itself (`out/.gitignore` is
+`*`), so builds never show up in git. `lan\copy-to-out.ps1 -Kind android|desktop` does the
+copying. Do not use `dist/` for this: it is the browser build the server serves, it is
+wiped on every build, and it gets copied into the APK.
 
 ## Gotchas found while setting this up
 
