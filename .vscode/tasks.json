@@ -48,6 +48,13 @@
       "command": "pnpm install --frozen-lockfile",
       "problemMatcher": []
     },
+    {
+      "label": "Setup: create desktop shortcuts",
+      "detail": "Start/Stop/Rebuild Server, Play, and FORK.md in Desktop\\World of ClaudeCraft.",
+      "type": "shell",
+      "command": "powershell.exe -NoProfile -File lan\\install-shortcuts.ps1 -NoPause",
+      "problemMatcher": []
+    },
 
     // ---- Database (Postgres 16 in Docker on 127.0.0.1:5433) ----
     {
@@ -79,6 +86,13 @@
           "endsPattern": "server listening on"
         }
       }
+    },
+    {
+      "label": "Server: stop (saves characters)",
+      "detail": "Ctrl+C to the server wherever it runs, then stops Postgres. Killing the task terminal skips the save.",
+      "type": "shell",
+      "command": "powershell.exe -NoProfile -File lan\\stop-server.ps1 -NoPause",
+      "problemMatcher": []
     },
 
     // ---- Client ----
@@ -188,11 +202,13 @@
     },
     {
       "label": "Android: LAN APK (bundle, build, install)",
+      "detail": "Ends by rebuilding the browser client, since the native bundle overwrites dist/.",
       "dependsOrder": "sequence",
       "dependsOn": [
         "Android: web bundle for LAN server + cap sync",
         "Android: build debug APK",
-        "Android: install debug APK on phone"
+        "Android: install debug APK on phone",
+        "Build: web client (dist/)"
       ],
       "problemMatcher": []
     },
